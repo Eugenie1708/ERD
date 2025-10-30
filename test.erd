@@ -1,0 +1,10 @@
+erdiagram TestModel
+
+notation=crowsfoot
+
+entity A { a_id INTEGER key name }
+entity B { b_id INTEGER key name }
+
+relationship R {
+    A[1] -> B[N]
+}

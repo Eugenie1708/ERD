@@ -1,0 +1,190 @@
+erdiagram RC_Models
+
+notation=crowsfoot
+
+// === Entities ===
+entity Customer {
+    customer_id: INTEGER key
+    name
+    email
+    customer_type    // e.g., Active, Prospect
+    phone
+    address
+    registration_date: DATE
+}
+
+entity MarketingCampaign {
+    campaign_id: INTEGER key
+    name
+    source
+    start_date: DATE
+    end_date: DATE
+}
+
+entity Product {
+    product_id: VARCHAR(20) key
+    name
+    description
+    product_type      // e.g., Plastic model, Decal
+    unit_price: DECIMAL(10,2)
+    min_qty_on_hand: INTEGER
+    min_order_qty: INTEGER
+    last_restock_date: DATE
+}
+
+entity Manufacturer {
+    manufacturer_id: INTEGER key
+    name
+    website
+    contact_info
+}
+
+entity Inventory {
+    inventory_id: INTEGER key
+    product_id: VARCHAR(20)
+    quantity_on_hand: INTEGER
+    location
+}
+
+entity SalesOrder {
+    order_id: VARCHAR(20) key
+    customer_id: INTEGER
+    order_date: DATE
+    status            // e.g., Pending, Completed, Shipped
+    total_amount: DECIMAL(12,2)
+}
+
+entity SalesOrderLine {
+    order_id: VARCHAR(20) key
+    line_no: INTEGER key
+    product_id: VARCHAR(20)
+    quantity: INTEGER
+    unit_price: DECIMAL(10,2)  // stored per-line for historical pricing
+}
+
+entity PurchaseOrder {
+    po_id: VARCHAR(20) key
+    manufacturer_id: INTEGER
+    order_date: DATE
+    status            // Pending, Ordered, Received, Partially Received
+    total_amount: DECIMAL(12,2)
+}
+
+entity PurchaseOrderLine {
+    po_id: VARCHAR(20) key
+    line_no: INTEGER key
+    product_id: VARCHAR(20)
+    quantity: INTEGER
+    unit_cost: DECIMAL(10,2)
+}
+
+entity Invoice {
+    invoice_id: VARCHAR(20) key
+    order_id: VARCHAR(20)
+    invoice_date: DATE
+    status            // Pending, Paid, Shipped, Completed
+    shipping_charge: DECIMAL(10,2)
+    total_amount: DECIMAL(12,2)
+}
+
+entity InvoiceLine {
+    invoice_id: VARCHAR(20) key
+    line_no: INTEGER key
+    product_id: VARCHAR(20)
+    quantity: INTEGER
+    unit_price: DECIMAL(10,2)
+}
+
+entity Backorder {
+    backorder_id: INTEGER key
+    order_id: VARCHAR(20)
+    product_id: VARCHAR(20)
+    quantity: INTEGER
+    created_date: DATE
+    status
+}
+
+// === Relationships & constraints ===
+
+// Customers can appear on many marketing campaigns and each campaign can include many customers (M:N)
+// Implement M:N Marketing relationship via explicit join entity (some renderers prefer this)
+entity MarketingList {
+    customer_id: INTEGER key
+    campaign_id: INTEGER key
+    signup_date: DATE
+}
+
+relationship Customer_to_MarketingList {
+    Customer[1] -> MarketingList[0..N]
+}
+
+relationship MarketingCampaign_to_MarketingList {
+    MarketingCampaign[1] -> MarketingList[0..N]
+}
+
+// Each product is sourced from exactly one manufacturer; a manufacturer may supply many products
+relationship Manufactures {
+    Manufacturer[1] -> Product[N]
+}
+
+// Inventory tracks quantities for products (one inventory record per product/location)
+relationship Inventory_Of {
+    Product[1] -> Inventory[0..N]
+}
+
+// Customers place SalesOrders; an order belongs to exactly one customer
+relationship Places_Order {
+    Customer[1] -> SalesOrder[0..N]
+}
+
+// Orders have line items; each line references a product
+relationship Order_Has_Line {
+    SalesOrder[1] -> SalesOrderLine[1..N]
+}
+
+relationship Product_in_OrderLine {
+    Product[1] -> SalesOrderLine[0..N]
+}
+
+// Orders may generate an Invoice when the transaction completes. Invoice may be absent until completion.
+relationship Order_Generates_Invoice {
+    SalesOrder[1] -> Invoice[0..1]
+}
+
+// Invoice lines mirror order lines (prices stored at line level for history)
+relationship Invoice_Has_Line {
+    Invoice[1] -> InvoiceLine[1..N]
+}
+
+relationship Product_in_InvoiceLine {
+    Product[1] -> InvoiceLine[0..N]
+}
+
+// Backorders are associated with orders and products; not billed until shipped (business rule)
+relationship Backorder_For_Order {
+    SalesOrder[1] -> Backorder[0..N]
+}
+
+relationship Backorder_For_Product {
+    Product[1] -> Backorder[0..N]
+}
+
+// Purchase orders are placed to manufacturers; each PO has many lines referencing products
+relationship PO_To_Manufacturer {
+    Manufacturer[1] -> PurchaseOrder[0..N]
+}
+
+relationship PO_Has_Line {
+    PurchaseOrder[1] -> PurchaseOrderLine[1..N]
+}
+
+relationship Product_in_POBLine {
+    Product[1] -> PurchaseOrderLine[0..N]
+}
+
+// Business-rule notes (non-executable; documentation):
+//  - Automatic reordering: when Inventory.quantity_on_hand < Product.min_qty_on_hand, a PurchaseOrder is generated
+//  - Single manufacturer per product: Product -> Manufacturer is 1..1 on Manufacturer side
+//  - Backorders are not billed until shipment: Invoice generated only after shipment event
+//  - Product removal: if no sale within 4 weeks of Product.last_restock_date, product is scrapped
+//  - Unit prices are stored at line-item level (SalesOrderLine.unit_price, InvoiceLine.unit_price, PurchaseOrderLine.unit_cost)
